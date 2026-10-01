@@ -21,6 +21,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -37,66 +38,17 @@ NON_PRODUCT_PREFIXES = ("/institucional", "/guias", "/account", "/login", "/chec
 
 PAGE_SIZE = 100          # the site caps _limit at 100
 MAX_PAGES = 20           # safety stop for pagination
-REQUEST_DELAY = 0.5      # seconds between requests, to be polite
+REQUEST_DELAY = 0.5      # seconds each worker waits before a request, to be polite
+WORKERS = 4              # parallel product-page fetches (~3 requests/s in total)
 REQUEST_TIMEOUT = 90     # uncached top-level categories can take 30s+
 RETRIES = 3
 
-DEFAULT_DB = Path(__file__).with_name("flexform_prices.db")
+DEFAULT_DB = Path(__file__).parent / "data" / "flexform_prices.db"
 DEFAULT_INTERVAL_MIN = 30
 
 log = logging.getLogger("flexform")
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS products (
-    id          INTEGER PRIMARY KEY,   -- Flexform item id
-    name        TEXT NOT NULL,
-    url         TEXT NOT NULL,
-    category    TEXT,
-    first_seen  TEXT NOT NULL,
-    last_seen   TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS runs (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    started_at      TEXT NOT NULL,
-    finished_at     TEXT,
-    products_found  INTEGER,
-    complete        INTEGER,           -- 1 if every category was fetched OK
-    errors          TEXT
-);
-
--- One row per product per run. Prices are in BRL.
---   price_cash : "a vista" price (PIX / boleto)
---   price_list : full price, paid in up to 10x on the card
---   available  : 1 in stock / 0 out of stock / NULL unknown (listing pages do not say)
---   source     : 'listing' (category page) or 'product' (the product's own page)
--- NULL prices mean the page showed none.
-CREATE TABLE IF NOT EXISTS price_history (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_id      INTEGER NOT NULL REFERENCES runs(id),
-    product_id  INTEGER NOT NULL REFERENCES products(id),
-    checked_at  TEXT NOT NULL,
-    price_cash  REAL,
-    price_list  REAL,
-    available   INTEGER,
-    source      TEXT
-);
-
--- Sitemap URLs that are not office-chair product pages; never fetched again.
-CREATE TABLE IF NOT EXISTS ignored_urls (
-    url         TEXT PRIMARY KEY,
-    checked_at  TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_price_history_product
-    ON price_history(product_id, checked_at);
-
-CREATE VIEW IF NOT EXISTS latest_prices AS
-SELECT p.id, p.name, p.category, p.url, h.checked_at, h.price_cash, h.price_list, h.available
-FROM products p
-JOIN price_history h ON h.id = (
-    SELECT id FROM price_history WHERE product_id = p.id ORDER BY id DESC LIMIT 1
-);
-"""
+SCHEMA_FILE = Path(__file__).with_name("schema.sql")
 
 
 # --------------------------------------------------------------------------- #
@@ -251,7 +203,17 @@ def scrape_listings():
     return products, errors
 
 
-def scrape_unlisted(conn, listed):
+def fetch_product(url):
+    """Thread-pool worker: returns (url, product or None, error or None).
+    Touches no shared state; each worker waits REQUEST_DELAY before its request."""
+    time.sleep(REQUEST_DELAY)
+    try:
+        return url, parse_product_page(fetch(url), url), None
+    except Exception as e:      # HTTPError included; the caller decides what 404 means
+        return url, None, e
+
+
+def scrape_unlisted(conn, listed, workers=WORKERS):
     """Fetch product pages the listings do not show (mostly out-of-stock or
     colour variants). Candidates: sitemap URLs + products we already know."""
     errors = []
@@ -267,29 +229,27 @@ def scrape_unlisted(conn, listed):
     todo = sorted(candidates - skip)
     log.info("fetching %d product pages not covered by the listings", len(todo))
 
+    # Pages are fetched in parallel (network-bound); results are then classified
+    # one by one in URL order, so the outcome does not depend on thread timing.
     found, not_products = {}, []
-    for n, url in enumerate(todo, 1):
-        if n % 25 == 0:
-            log.info("  product pages: %d/%d", n, len(todo))
-        time.sleep(REQUEST_DELAY)
-        try:
-            item = parse_product_page(fetch(url), url)
-        except urllib.error.HTTPError as e:
-            if e.code == 404:        # gone from the site; keep history, stop polling
-                not_products.append(url)
+    with ThreadPoolExecutor(max_workers=max(1, min(workers, len(todo) or 1))) as pool:
+        results = pool.map(fetch_product, todo)
+        for n, (url, item, err) in enumerate(results, 1):
+            if n % 25 == 0:
+                log.info("  product pages: %d/%d", n, len(todo))
+            if isinstance(err, urllib.error.HTTPError) and err.code == 404:
+                not_products.append(url)     # gone from the site; keep history, stop polling
+                continue
+            if err is not None:
+                log.error("product %s failed: %s", url, err)
+                errors.append(f"{url}: {err}")
+                continue
+            if item is None or item["category"] != OFFICE_CATEGORY:
+                not_products.append(url)      # not a product, or not an office chair
+            elif item["id"] in listed or item["id"] in found:
+                not_products.append(url)      # old slug of a product we already track
             else:
-                errors.append(f"{url}: HTTP {e.code}")
-            continue
-        except Exception as e:
-            log.error("product %s failed: %s", url, e)
-            errors.append(f"{url}: {e}")
-            continue
-        if item is None or item["category"] != OFFICE_CATEGORY:
-            not_products.append(url)      # not a product, or not an office chair
-        elif item["id"] in listed or item["id"] in found:
-            not_products.append(url)      # old slug of a product we already track
-        else:
-            found.setdefault(item["id"], item)
+                found.setdefault(item["id"], item)
     return found, not_products, errors
 
 
@@ -301,12 +261,13 @@ def now_iso():
 
 
 def open_db(path):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
-    conn.executescript(SCHEMA)
+    conn.executescript(SCHEMA_FILE.read_text(encoding="utf-8"))
     return conn
 
 
-def run_check(conn, changes_only=False):
+def run_check(conn, changes_only=False, workers=WORKERS):
     """Scrape and store prices. Returns (products_found, errors).
 
     changes_only: write a price_history row only when a product's price or
@@ -316,7 +277,7 @@ def run_check(conn, changes_only=False):
     started_at = now_iso()
     products, errors = scrape_listings()
     if products:   # without listings we cannot tell what is "unlisted"; skip the second pass
-        extra, not_products, extra_errors = scrape_unlisted(conn, products)
+        extra, not_products, extra_errors = scrape_unlisted(conn, products, workers)
         for pid, p in extra.items():
             products.setdefault(pid, p)
         errors += extra_errors
@@ -402,6 +363,8 @@ def main():
     ap.add_argument("--interval", type=float, default=DEFAULT_INTERVAL_MIN,
                     help="minutes between checks (default: %(default)s)")
     ap.add_argument("--once", action="store_true", help="run a single check and exit")
+    ap.add_argument("--workers", type=int, default=WORKERS,
+                    help="parallel product-page fetches (default: %(default)s)")
     ap.add_argument("--changes-only", action="store_true",
                     help="store a price row only when price/availability changed; leave the db "
                          "file untouched if nothing did (for committing the db to git)")
@@ -411,7 +374,7 @@ def main():
     conn = open_db(args.db)
 
     if args.once:
-        count, _ = run_check(conn, args.changes_only)
+        count, _ = run_check(conn, args.changes_only, args.workers)
         return 0 if count else 1      # partial errors are logged, not fatal
 
     log.info("tracking every %g min -> %s (Ctrl+C to stop)", args.interval, args.db)
@@ -419,7 +382,7 @@ def main():
         while True:
             t0 = time.monotonic()
             try:
-                run_check(conn, args.changes_only)
+                run_check(conn, args.changes_only, args.workers)
             except Exception:
                 log.exception("check failed; will retry next cycle")
             time.sleep(max(0, args.interval * 60 - (time.monotonic() - t0)))

@@ -2,21 +2,36 @@
 
 Tracks the price of every **office chair** (all colour variants) on
 https://www.flexform.com.br/ and keeps the history in a SQLite database,
-`flexform_prices.db`, committed to this repo.
+`data/flexform_prices.db`, committed to this repo.
 
 It runs by itself on GitHub Actions every 30 minutes
 ([`.github/workflows/track.yml`](.github/workflows/track.yml)). Nothing to run locally.
 Each run checks the site and, **only if a price or stock status changed**, commits the
-updated database. So the commit history of `flexform_prices.db` is a log of price changes.
+updated database. So the commit history of `data/flexform_prices.db` is a log of price changes.
 
 - Run it now: Actions tab -> *Track prices* -> *Run workflow*.
 - GitHub's schedule is best-effort: runs are sometimes delayed by several minutes.
 - Public repos have scheduled workflows paused after 60 days without repo activity;
   if that ever happens, re-enable it in the Actions tab.
 
+## Viewing the history
+
+Open [`index.html`](index.html) in a browser: a price chart (step lines, since a price holds
+until it changes) with a timeframe selector (24h / 7d / 30d / 90d / 1y / All / custom dates),
+cash or list price, R$ or % change, and a searchable list of every product with its
+current price, change over the timeframe, stock and a link to the product page.
+Tick up to 8 products to plot them; hover the chart for exact values.
+
+- It reads `data/flexform_prices.db` with [sql.js](https://github.com/sql-js/sql.js) (loaded from
+  cdnjs, so it needs an internet connection). Nothing is uploaded.
+- Browsers don't let a page opened from disk (`file://`) read other files, so it will ask you to
+  pick the database file (`data/flexform_prices.db`). Served over http it loads it automatically,
+  e.g. `python -m http.server` in this folder, then http://localhost:8000.
+
 ## Using the data
 
-Download `flexform_prices.db` (or clone the repo) and query it with any SQLite tool:
+Download `data/flexform_prices.db` (or clone the repo) and query it with any SQLite tool
+(the table definitions are in [`schema.sql`](schema.sql)):
 
 ```sql
 -- current prices
@@ -56,7 +71,8 @@ price came from a listing page, which doesn't show stock; it never counts as a c
 2. **Product-page pass** - some products (mostly out of stock, plus some colour variants)
    are not shown in the listing. They are found through `sitemap.xml` and the products
    already in the database, and read from their own page (schema.org JSON-LD), which also
-   gives stock availability.
+   gives stock availability. These pages are fetched in parallel (4 workers by default),
+   which is what keeps a run to a few seconds.
 
 Requests are spaced 0.5 s apart; `robots.txt` doesn't disallow any of these pages.
 
@@ -67,6 +83,7 @@ Python 3.9+, standard library only.
 ```
 python tracker.py --once                 # one check, store every price
 python tracker.py --once --changes-only  # what the workflow runs
+python tracker.py --workers 8            # more parallel fetches (default 4, about 3 requests/s)
 python tracker.py                        # loop forever, every 30 min (--interval N)
 ```
 

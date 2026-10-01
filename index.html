@@ -1,0 +1,821 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flexform Price History</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --text: #0b0b0b;
+    --text-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11,11,11,0.10);
+    --ghost: rgba(11,11,11,0.05);
+    --accent: #2a78d6;
+    --good: #006300;
+    --bad: #d03b3b;
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+    --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --text: #ffffff; --text-2: #c3c2b7;
+      --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+      --border: rgba(255,255,255,0.10); --ghost: rgba(255,255,255,0.07);
+      --accent: #3987e5; --good: #0ca30c; --bad: #ec835a;
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+      --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --text: #ffffff; --text-2: #c3c2b7;
+    --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+    --border: rgba(255,255,255,0.10); --ghost: rgba(255,255,255,0.07);
+    --accent: #3987e5; --good: #0ca30c; --bad: #ec835a;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--page); color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 24px 16px 64px; }
+
+  header { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 24px; margin-bottom: 20px; }
+  header .titles { flex: 1 1 320px; min-width: 0; }
+  h1 { font-size: 22px; line-height: 1.25; margin: 0 0 4px; font-weight: 650; }
+  .sub { color: var(--text-2); font-size: 13px; }
+  .head-actions { display: flex; gap: 8px; }
+
+  button, input, select { font: inherit; color: inherit; }
+  .btn {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 12px; cursor: pointer; font-size: 13px; color: var(--text-2);
+  }
+  .btn:hover { background: var(--ghost); color: var(--text); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 2px; font-weight: 650; }
+  .card .hint { color: var(--text-2); font-size: 13px; margin: 0 0 12px; }
+
+  /* filters: one row above the chart */
+  .filters { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin-bottom: 16px; }
+  .filters fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+  .seg label { position: relative; }
+  .seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .seg span { display: block; padding: 6px 12px; font-size: 13px; color: var(--text-2); border-left: 1px solid var(--border); }
+  .seg label:first-child span { border-left: 0; }
+  .seg label:hover span { background: var(--ghost); }
+  .seg input:checked + span { color: var(--text); font-weight: 650; background: var(--ghost); box-shadow: inset 0 -2px 0 var(--accent); }
+  .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .filter-label { font-size: 12px; color: var(--muted); margin-right: 6px; }
+  .custom { display: none; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
+  .custom.on { display: inline-flex; }
+  input[type="date"], input[type="search"], select {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; font-size: 13px;
+  }
+
+  /* chart */
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 8px; margin-bottom: 8px; min-height: 28px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px; max-width: 100%;
+    padding: 3px 4px 3px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px;
+  }
+  .chip .key { width: 14px; height: 2px; border-radius: 1px; flex: none; }
+  .chip .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip button { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: 999px; }
+  .chip button:hover { background: var(--ghost); color: var(--text); }
+  #chart { position: relative; width: 100%; }
+  #chart svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+  #chart svg:focus-visible { outline-offset: 0; border-radius: 6px; }
+  .axis text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .axis .grid { stroke: var(--grid); stroke-width: 1; }
+  .axis .base { stroke: var(--axis); stroke-width: 1; }
+  .endlabel { fill: var(--text); font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .empty { color: var(--text-2); padding: 56px 8px; text-align: center; }
+  .tip {
+    position: absolute; pointer-events: none; z-index: 5; min-width: 180px; max-width: 400px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.14); font-size: 12px; display: none;
+  }
+  .tip .when { color: var(--text-2); margin-bottom: 4px; }
+  .tip .row { display: flex; align-items: baseline; gap: 8px; margin-top: 3px; }
+  .tip .k { width: 12px; height: 2px; flex: none; align-self: center; border-radius: 1px; }
+  .tip .v { font-weight: 650; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+  .tip .n { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+
+  details.tableview { margin-top: 12px; font-size: 13px; }
+  details.tableview summary { cursor: pointer; color: var(--text-2); }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--grid); vertical-align: middle; }
+  th { font-weight: 600; color: var(--text-2); font-size: 12px; white-space: nowrap; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tbody tr:hover { background: var(--ghost); }
+
+  /* product list */
+  .list-tools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 12px; }
+  .list-tools .count { color: var(--text-2); font-size: 13px; margin-left: auto; }
+  #products td.sel { width: 32px; padding-right: 0; }
+  #products input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+  #products input:disabled { cursor: not-allowed; opacity: 0.4; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: baseline; }
+  .pname { font-weight: 550; }
+  .pcat { color: var(--muted); font-size: 12px; }
+  .delta { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .delta.down { color: var(--good); }
+  .delta.up { color: var(--bad); }
+  .delta.flat { color: var(--muted); }
+  .stock { white-space: nowrap; color: var(--text-2); }
+  .stock.in { color: var(--good); }
+  .stock.out { color: var(--muted); }
+  a.go { color: var(--accent); text-decoration: none; white-space: nowrap; }
+  a.go:hover { text-decoration: underline; }
+
+  /* loader */
+  #loader { text-align: center; padding: 40px 16px; }
+  #loader p { margin: 0 0 8px; color: var(--text-2); max-width: 560px; margin-inline: auto; }
+  #loader .big { color: var(--text); font-weight: 650; font-size: 17px; margin-bottom: 8px; }
+  #loader.drag { outline: 2px dashed var(--accent); outline-offset: -8px; }
+  .hide { display: none !important; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-width: 720px) {
+    .wrap { padding: 16px 12px 48px; }
+    .hide-sm { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="titles">
+      <h1>Flexform office chairs: price history</h1>
+      <div class="sub" id="meta">Loading database…</div>
+    </div>
+    <div class="head-actions">
+      <button class="btn" id="open-other" type="button">Open another database…</button>
+      <button class="btn" id="theme" type="button" aria-label="Toggle light and dark theme">Theme</button>
+    </div>
+  </header>
+  <input type="file" id="file" accept=".db,.sqlite,.sqlite3,application/vnd.sqlite3,application/octet-stream" class="hide">
+
+  <div id="loader" class="card hide">
+    <div class="big" id="loader-title">Choose the database file</div>
+    <p id="loader-msg"></p>
+    <p><button class="btn" id="pick" type="button">Choose data/flexform_prices.db</button> or drop the file here.</p>
+  </div>
+
+  <main id="app" class="hide">
+    <div class="filters">
+      <fieldset>
+        <legend class="filter-label" style="float:left;padding:0">Timeframe</legend>
+        <div class="seg" id="range" role="radiogroup" aria-label="Timeframe"></div>
+      </fieldset>
+      <div class="custom" id="custom">
+        <label>From <input type="date" id="from"></label>
+        <label>to <input type="date" id="to"></label>
+      </div>
+      <fieldset>
+        <legend class="filter-label" style="float:left;padding:0">Price</legend>
+        <div class="seg" id="ptype" role="radiogroup" aria-label="Price type"></div>
+      </fieldset>
+      <fieldset>
+        <legend class="filter-label" style="float:left;padding:0">Scale</legend>
+        <div class="seg" id="scale" role="radiogroup" aria-label="Chart scale"></div>
+      </fieldset>
+    </div>
+
+    <section class="card" aria-labelledby="chart-title">
+      <h2 id="chart-title">Price over time</h2>
+      <p class="hint" id="chart-hint"></p>
+      <div class="legend" id="legend" aria-label="Products on the chart"></div>
+      <div id="chart"><div class="tip" id="tip" role="status"></div></div>
+      <details class="tableview" id="tableview">
+        <summary>Show as table</summary>
+        <div class="scroll"><table id="hist-table"></table></div>
+        <p class="hint" id="hist-note"></p>
+      </details>
+    </section>
+
+    <section class="card" aria-labelledby="list-title">
+      <h2 id="list-title">All products</h2>
+      <p class="hint">Tick up to 8 products to plot them. Change is measured over the selected timeframe, using the price type above.</p>
+      <div class="list-tools">
+        <input type="search" id="q" placeholder="Search products…" aria-label="Search products">
+        <select id="sort" aria-label="Sort products"></select>
+        <span class="count" id="count"></span>
+      </div>
+      <div class="scroll">
+        <table id="products">
+          <thead><tr>
+            <th><span class="sr">Plot</span></th>
+            <th>Product</th>
+            <th class="num">Cash</th>
+            <th class="num hide-sm">List</th>
+            <th class="num">Change</th>
+            <th class="hide-sm">Stock</th>
+            <th>Link</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"
+        integrity="sha384-8D3Rsfo535FqoC1pHCCQMrNf75UgzyoG/HQm9zOzITRrz3QKzecc2E7JXKGCXoWu"
+        crossorigin="anonymous"></script>
+<script>
+(() => {
+'use strict';
+
+const SQL_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/';
+const DB_URL = 'data/flexform_prices.db';
+const MAX_SERIES = 8;
+const HOUR = 3600e3, DAY = 24 * HOUR;
+const RANGES = [['24h', '24h', DAY], ['7d', '7d', 7 * DAY], ['30d', '30d', 30 * DAY],
+                ['90d', '90d', 90 * DAY], ['1y', '1y', 365 * DAY], ['all', 'All', 0], ['custom', 'Custom', 0]];
+
+const $ = (s, r = document) => r.querySelector(s);
+const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const brl0 = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+const state = {
+  products: [],            // {id,name,url,category,rows:[{t,cash,list,avail}], avail}
+  selected: [],            // product ids, in the order they were added
+  slot: new Map(),         // id -> 0..7 (colour follows the product, never its rank)
+  range: '30d', from: null, to: null,
+  ptype: 'cash', scale: 'abs',
+  q: '', sort: 'name',
+  cursorT: null,
+  dataEnd: null,
+};
+let geo = null;            // geometry of the last chart draw, used by the hover layer
+
+/* ------------------------------------------------------------------ helpers */
+function el(tag, attrs = {}, parent) {
+  const n = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function h(tag, props = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const k in props) {
+    if (k === 'class') n.className = props[k];
+    else if (k === 'text') n.textContent = props[k];
+    else if (k === 'style') n.style.cssText = props[k];
+    else n.setAttribute(k, props[k]);
+  }
+  for (const c of kids) if (c != null) n.append(c);
+  return n;
+}
+const fmtDateTime = t => new Date(t).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const fmtDate = t => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+const safeUrl = u => /^https:\/\/www\.flexform\.com\.br\//.test(u || '') ? u : null;
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const pad2 = n => String(n).padStart(2, '0');
+const dateInputValue = t => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+
+/* ------------------------------------------------------------------ data */
+async function openDatabase(bytes) {
+  const SQL = await initSqlJs({ locateFile: f => SQL_CDN + f });
+  const db = new SQL.Database(bytes);
+  try {
+    const prods = db.exec('SELECT id, name, url, category FROM products');
+    const hist = db.exec('SELECT product_id, checked_at, price_cash, price_list, available FROM price_history ORDER BY product_id, checked_at');
+    const map = new Map();
+    for (const [id, name, url, category] of (prods[0] ? prods[0].values : []))
+      map.set(id, { id, name, url, category, rows: [], avail: null });
+    let lastT = 0;
+    for (const [pid, at, cash, list, av] of (hist[0] ? hist[0].values : [])) {
+      const p = map.get(pid); if (!p) continue;
+      const t = Date.parse(at);
+      p.rows.push({ t, cash, list, avail: av });
+      if (av !== null) p.avail = av;
+      lastT = Math.max(lastT, t);
+    }
+    state.products = [...map.values()].filter(p => p.rows.length);
+    state.dataEnd = lastT;
+  } finally { db.close(); }
+}
+
+/* Step series for one product: the price only moves at recorded changes. */
+function seriesFor(p, type, t0, t1) {
+  const pts = [];
+  let prev;
+  for (const r of p.rows) {
+    const v = r[type];
+    if (v == null || v === prev) continue;
+    pts.push({ t: r.t, v }); prev = v;
+  }
+  if (!pts.length) return null;
+  // value in force at t0 (carry-in), then the changes inside the window
+  let carry = null;
+  for (const q of pts) if (q.t <= t0) carry = q; else break;
+  const inside = pts.filter(q => q.t > t0 && q.t <= t1);
+  const out = [];
+  if (carry) out.push({ t: t0, v: carry.v, synthetic: true });
+  else if (!inside.length) return null;          // not yet seen in this window
+  out.push(...inside);
+  const last = out[out.length - 1];
+  out.push({ t: t1, v: last.v, synthetic: true });
+  return { pts: out, changes: inside.length - (carry ? 0 : 1) };
+}
+function valueAt(pts, t) {
+  let v = null;
+  for (const q of pts) { if (q.t <= t) v = q.v; else break; }
+  return v;
+}
+function windowBounds() {
+  const now = Date.now();
+  let t1 = now, t0;
+  if (state.range === 'custom' && state.from != null) {
+    t0 = state.from; t1 = Math.min(now, state.to != null ? state.to : now);
+  } else if (state.range === 'all') {
+    t0 = Math.min(...state.products.map(p => p.rows[0].t));
+  } else {
+    t0 = t1 - RANGES.find(r => r[0] === state.range)[2];
+  }
+  if (t1 - t0 < HOUR) t0 = t1 - HOUR;
+  return [t0, t1];
+}
+function productChange(p, t0, t1) {
+  const s = seriesFor(p, state.ptype, t0, t1);
+  if (!s) return null;
+  const first = s.pts[0].v, last = s.pts[s.pts.length - 1].v;
+  return { pct: first ? (last - first) / first : 0, from: first, to: last, changes: Math.max(0, s.changes) };
+}
+
+/* ------------------------------------------------------------------ ticks */
+function niceTicks(min, max, n) {
+  const span = max - min || 1, raw = span / n;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= raw) || 10 * mag;
+  const out = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + step * 1e-9; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+function timeTicks(t0, t1, max) {
+  const steps = [5, 10, 15, 30].map(m => m * 60e3)
+    .concat([1, 2, 3, 6, 12].map(x => x * HOUR), [1, 2, 3, 5, 7, 14].map(x => x * DAY));
+  const months = [1, 2, 3, 6, 12];
+  const span = t1 - t0, ticks = [];
+  const fixed = steps.find(s => span / s <= max + 0.5);
+  if (fixed) {
+    if (fixed < DAY) {
+      const off = new Date(t0).getTimezoneOffset() * 60e3;
+      for (let t = Math.ceil((t0 - off) / fixed) * fixed + off; t <= t1; t += fixed) ticks.push(t);
+    } else {
+      const d = new Date(t0); d.setHours(0, 0, 0, 0);
+      const n = fixed / DAY;
+      while (d.getTime() < t0) d.setDate(d.getDate() + 1);
+      for (; d.getTime() <= t1; d.setDate(d.getDate() + n)) ticks.push(d.getTime());
+    }
+  } else {
+    const m = months.find(x => span / (x * 30.4 * DAY) <= max + 0.5) || 12;
+    const d = new Date(t0); d.setDate(1); d.setHours(0, 0, 0, 0);
+    while (d.getTime() < t0) d.setMonth(d.getMonth() + 1);
+    for (; d.getTime() <= t1; d.setMonth(d.getMonth() + m)) ticks.push(d.getTime());
+  }
+  const label = t => {
+    const d = new Date(t);
+    if (span <= 2 * DAY) return d.getHours() === 0 && d.getMinutes() === 0
+      ? d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+      : `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    if (span > 300 * DAY) return d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  };
+  return ticks.map(t => ({ t, label: label(t) }));
+}
+
+/* ------------------------------------------------------------------ chart */
+function visibleSeries(t0, t1) {
+  const out = [];
+  for (const id of state.selected) {
+    const p = state.products.find(x => x.id === id);
+    const s = p && seriesFor(p, state.ptype, t0, t1);
+    if (s) out.push({ p, slot: state.slot.get(id), pts: s.pts, changes: s.changes });
+  }
+  return out;
+}
+
+function drawChart() {
+  const box = $('#chart');
+  box.querySelectorAll('svg, .empty').forEach(n => n.remove());
+  const [t0, t1] = windowBounds();
+  const series = visibleSeries(t0, t1);
+  const pct = state.scale === 'pct';
+  const typeName = state.ptype === 'cash' ? 'Cash price (PIX/boleto)' : 'List price (up to 10x on card)';
+  $('#chart-hint').textContent = `${typeName} · ${fmtDate(t0)} to ${fmtDate(t1)}` +
+    (pct ? ' · % change since the start of the timeframe' : '');
+  geo = null; hideTip();
+
+  if (!series.length) {
+    box.prepend(h('div', { class: 'empty', text: state.selected.length
+      ? 'None of the selected products have a price in this timeframe.'
+      : 'Tick products in the list below to plot them.' }));
+    drawLegend(series); drawHistTable(series, t0, t1);
+    return;
+  }
+
+  const W = Math.max(300, box.clientWidth), H = W < 520 ? 300 : 380;
+  const showLabels = series.length <= 4;
+  const narrow = W < 520;
+  const m = { l: pct ? 46 : narrow ? 58 : 70, r: showLabels ? (narrow ? 68 : 84) : 12, t: 12, b: 28 };
+  const x0 = m.l, x1 = W - m.r, y0 = H - m.b, yTop = m.t;
+
+  const val = (s, v) => pct ? (v / s.pts[0].v - 1) * 100 : v;
+  let lo = Infinity, hi = -Infinity;
+  for (const s of series) for (const q of s.pts) { const v = val(s, q.v); lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  if (pct) { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
+  if (hi - lo < 1e-9) { const padv = Math.max(Math.abs(hi) * 0.05, pct ? 1 : 10); lo -= padv; hi += padv; }
+  else { const padv = (hi - lo) * 0.08; lo -= padv; hi += padv; }
+  if (!pct && lo < 0) lo = 0;
+  const yTicks = niceTicks(lo, hi, Math.max(3, Math.floor((y0 - yTop) / 56)));
+  const X = t => x0 + (t - t0) / (t1 - t0) * (x1 - x0);
+  const Y = v => y0 - (v - lo) / (hi - lo) * (y0 - yTop);
+
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', tabindex: '0',
+    'aria-label': `Step chart of ${state.ptype === 'cash' ? 'cash' : 'list'} price for ${series.length} product${series.length > 1 ? 's' : ''}. Use left and right arrow keys to read values; the full data is in the table below.` });
+  const ax = el('g', { class: 'axis' }, svg);
+  for (const v of yTicks) {
+    const y = Y(v);
+    if (y < yTop - 1 || y > y0 + 1) continue;
+    el('line', { class: v === 0 && pct ? 'base' : 'grid', x1: x0, x2: x1, y1: y, y2: y }, ax);
+    const tx = el('text', { x: x0 - 8, y: y + 4, 'text-anchor': 'end' }, ax);
+    tx.textContent = pct ? `${v > 0 ? '+' : ''}${+v.toFixed(1)}%` : brl0.format(v);
+  }
+  el('line', { class: 'base', x1: x0, x2: x1, y1: y0, y2: y0 }, ax);
+  const maxTicks = Math.max(2, Math.floor((x1 - x0) / (narrow ? 60 : 90)));
+  for (const tk of timeTicks(t0, t1, maxTicks)) {
+    const x = X(tk.t);
+    if (x < x0 - 1 || x > x1 + 1) continue;
+    const tx = el('text', { x, y: y0 + 18, 'text-anchor': x > x1 - 14 ? 'end' : x < x0 + 14 ? 'start' : 'middle' }, ax);
+    tx.textContent = tk.label;
+  }
+
+  // lines (2px steps), then markers on real changes
+  const markerOK = series.reduce((n, s) => n + s.pts.length, 0) <= 90;
+  for (const s of series) {
+    let d = '';
+    s.pts.forEach((q, i) => {
+      const x = X(q.t), y = Y(val(s, q.v));
+      d += i === 0 ? `M${x},${y}` : `H${x}V${y}`;
+    });
+    el('path', { d, fill: 'none', style: `stroke:var(--s${s.slot + 1})`, 'stroke-width': 2,
+      'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+  }
+  for (const s of series) {
+    if (!markerOK) break;
+    s.pts.forEach((q, i) => {
+      if (q.synthetic) return;
+      el('circle', { cx: X(q.t), cy: Y(val(s, q.v)), r: 4, style: `fill:var(--s${s.slot + 1});stroke:var(--surface)`, 'stroke-width': 2 }, svg);
+    });
+  }
+  // direct labels at the line ends, only while they don't collide
+  if (showLabels) {
+    const ends = series.map(s => ({ s, y: Y(val(s, s.pts[s.pts.length - 1].v)) })).sort((a, b) => a.y - b.y);
+    if (ends.every((e, i) => i === 0 || e.y - ends[i - 1].y >= 14)) {
+      for (const e of ends) {
+        const last = e.s.pts[e.s.pts.length - 1];
+        el('circle', { cx: x1, cy: e.y, r: 4, style: `fill:var(--s${e.s.slot + 1});stroke:var(--surface)`, 'stroke-width': 2 }, svg);
+        const tx = el('text', { class: 'endlabel', x: x1 + 10, y: e.y + 4 }, svg);
+        tx.textContent = brl0.format(last.v);
+      }
+    }
+  }
+  // hover layer
+  const over = el('g', { id: 'over', style: 'display:none' }, svg);
+  el('line', { id: 'xhair', y1: yTop, y2: y0, style: 'stroke:var(--text-2)', 'stroke-width': 1 }, over);
+  for (const s of series) el('circle', { class: 'cdot', r: 4, style: `fill:var(--s${s.slot + 1});stroke:var(--surface)`, 'stroke-width': 2 }, over);
+  el('rect', { id: 'hit', x: x0, y: yTop, width: x1 - x0, height: y0 - yTop, fill: 'transparent' }, svg);
+
+  box.prepend(svg);
+  geo = { svg, series, t0, t1, x0, x1, X, Y, val, pct, W };
+  const hit = $('#hit', svg);
+  hit.addEventListener('pointermove', e => {
+    const r = svg.getBoundingClientRect();
+    const px = (e.clientX - r.left) * (W / r.width);
+    moveCursor(t0 + clamp((px - x0) / (x1 - x0), 0, 1) * (t1 - t0), e.clientX - r.left, e.clientY - r.top);
+  });
+  hit.addEventListener('pointerleave', hideTip);
+  svg.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Escape') return;
+    e.preventDefault();
+    if (e.key === 'Escape') return hideTip();
+    const step = (t1 - t0) / 40 * (e.key === 'ArrowLeft' ? -1 : 1);
+    const t = clamp((state.cursorT == null ? t1 : state.cursorT) + step, t0, t1);
+    const r = svg.getBoundingClientRect();
+    moveCursor(t, X(t) * r.width / W, 24);
+  });
+  svg.addEventListener('blur', hideTip);
+
+  drawLegend(series);
+  drawHistTable(series, t0, t1);
+}
+
+function moveCursor(t, cssX, cssY) {
+  if (!geo) return;
+  state.cursorT = t;
+  const { svg, series, X, Y, val, W, t0, t1 } = geo;
+  const over = $('#over', svg);
+  over.style.display = '';
+  const x = X(t);
+  const xl = $('#xhair', svg); xl.setAttribute('x1', x); xl.setAttribute('x2', x);
+  const tip = $('#tip');
+  tip.replaceChildren(h('div', { class: 'when', text: fmtDateTime(t) }));
+  const dots = over.querySelectorAll('.cdot');
+  const rows = [];
+  series.forEach((s, i) => {
+    const v = valueAt(s.pts, t);
+    if (v == null) { dots[i].style.display = 'none'; return; }
+    dots[i].style.display = '';
+    dots[i].setAttribute('cx', x); dots[i].setAttribute('cy', Y(val(s, v)));
+    rows.push({ s, v });
+  });
+  rows.sort((a, b) => b.v - a.v);
+  for (const { s, v } of rows) {
+    const shown = geo.pct ? `${(val(s, v) >= 0 ? '+' : '')}${val(s, v).toFixed(1)}%  ·  ${brl.format(v)}` : brl.format(v);
+    tip.append(h('div', { class: 'row' },
+      h('span', { class: 'k', style: `background:var(--s${s.slot + 1})` }),
+      h('span', { class: 'v', text: shown }),
+      h('span', { class: 'n', text: s.p.name })));
+  }
+  tip.style.display = 'block';
+  const bw = $('#chart').clientWidth, tw = tip.offsetWidth;
+  tip.style.left = (cssX + 16 + tw > bw ? Math.max(0, cssX - 16 - tw) : cssX + 16) + 'px';
+  tip.style.top = clamp(cssY - 10, 0, Math.max(0, geo.svg.getBoundingClientRect().height - tip.offsetHeight)) + 'px';
+}
+function hideTip() {
+  state.cursorT = null;
+  const tip = $('#tip'); if (tip) tip.style.display = 'none';
+  const over = $('#over'); if (over) over.style.display = 'none';
+}
+
+function drawLegend(series) {
+  const lg = $('#legend');
+  lg.replaceChildren();
+  for (const id of state.selected) {
+    const p = state.products.find(x => x.id === id); if (!p) continue;
+    const slot = state.slot.get(id);
+    const missing = !series.some(s => s.p.id === id);
+    const rm = h('button', { type: 'button', 'aria-label': `Remove ${p.name} from the chart`, text: '×' });
+    rm.addEventListener('click', () => toggleProduct(id, false));
+    lg.append(h('span', { class: 'chip', title: missing ? 'No price in this timeframe' : p.name },
+      h('span', { class: 'key', style: `background:var(--s${slot + 1})` }),
+      h('span', { class: 'nm', text: p.name + (missing ? ' (no data in range)' : '') }), rm));
+  }
+}
+
+function drawHistTable(series, t0, t1) {
+  const tb = $('#hist-table'), note = $('#hist-note');
+  tb.replaceChildren();
+  if (!series.length) { note.textContent = ''; return; }
+  const rows = [];
+  for (const s of series) {
+    for (const r of s.p.rows) if (r.t >= t0 && r.t <= t1) rows.push({ t: r.t, p: s.p, r });
+  }
+  rows.sort((a, b) => b.t - a.t);
+  const LIMIT = 300;
+  tb.append(h('thead', {}, h('tr', {}, h('th', { text: 'When' }), h('th', { text: 'Product' }),
+    h('th', { class: 'num', text: 'Cash' }), h('th', { class: 'num', text: 'List' }), h('th', { text: 'Stock' }))));
+  const body = h('tbody');
+  for (const { t, p, r } of rows.slice(0, LIMIT)) {
+    body.append(h('tr', {}, h('td', { text: fmtDateTime(t) }), h('td', { text: p.name }),
+      h('td', { class: 'num', text: r.cash == null ? '–' : brl.format(r.cash) }),
+      h('td', { class: 'num', text: r.list == null ? '–' : brl.format(r.list) }),
+      h('td', { text: r.avail == null ? '–' : r.avail ? 'In stock' : 'Out of stock' })));
+  }
+  tb.append(body);
+  note.textContent = `Recorded changes within the timeframe${rows.length > LIMIT ? ` (newest ${LIMIT} of ${rows.length})` : ''}. ` +
+    'The tracker only stores a row when a price or stock status changes, so a price holds until the next row.';
+}
+
+/* ------------------------------------------------------------------ product list */
+function toggleProduct(id, on) {
+  const has = state.selected.includes(id);
+  if (on && !has) {
+    if (state.selected.length >= MAX_SERIES) return;
+    const used = new Set(state.slot.values());
+    let slot = 0; while (used.has(slot)) slot++;
+    state.slot.set(id, slot); state.selected.push(id);
+  } else if (!on && has) {
+    state.selected = state.selected.filter(x => x !== id); state.slot.delete(id);
+  }
+  syncSelectionUI(); drawChart();
+}
+
+function syncSelectionUI() {
+  const full = state.selected.length >= MAX_SERIES;
+  for (const tr of $('#products tbody').children) {
+    const id = +tr.dataset.id, on = state.selected.includes(id);
+    const cb = $('input', tr), sw = $('.swatch', tr);
+    cb.checked = on; cb.disabled = full && !on;
+    cb.title = cb.disabled ? `Up to ${MAX_SERIES} products can be plotted at once` : '';
+    sw.style.background = on ? `var(--s${state.slot.get(id) + 1})` : 'transparent';
+    sw.style.border = on ? '0' : '1px solid var(--axis)';
+  }
+}
+
+function renderList() {
+  const [t0, t1] = windowBounds();
+  const q = state.q.trim().toLowerCase();
+  const info = new Map(state.products.map(p => {
+    return [p.id, { p, ch: productChange(p, t0, t1), cash: lastVal(p, 'cash'), list: lastVal(p, 'list') }];
+  }));
+  let items = [...info.values()].filter(x => !q || x.p.name.toLowerCase().includes(q));
+  const byPct = (a, b, dir) => {
+    const av = a.ch ? a.ch.pct : null, bv = b.ch ? b.ch.pct : null;
+    if (av === null) return 1; if (bv === null) return -1;
+    return dir * (av - bv);
+  };
+  const sorters = {
+    name: (a, b) => a.p.name.localeCompare(b.p.name, undefined, { numeric: true }),
+    'price-asc': (a, b) => (a.cash ?? Infinity) - (b.cash ?? Infinity),
+    'price-desc': (a, b) => (b.cash ?? -Infinity) - (a.cash ?? -Infinity),
+    drop: (a, b) => byPct(a, b, 1),
+    rise: (a, b) => byPct(a, b, -1),
+    changes: (a, b) => (b.ch ? b.ch.changes : -1) - (a.ch ? a.ch.changes : -1),
+  };
+  items.sort(sorters[state.sort]);
+
+  const body = $('#products tbody');
+  body.replaceChildren();
+  for (const { p, ch, cash, list } of items) {
+    const cb = h('input', { type: 'checkbox', 'aria-label': `Plot ${p.name}` });
+    cb.addEventListener('change', () => toggleProduct(p.id, cb.checked));
+    const url = safeUrl(p.url);
+    const link = url ? h('a', { class: 'go', href: url, target: '_blank', rel: 'noopener noreferrer', 'aria-label': `View ${p.name} on flexform.com.br` }, 'View ↗') : h('span', { class: 'pcat', text: '–' });
+    let delta;
+    if (!ch) delta = h('span', { class: 'delta flat', text: '–' });
+    else if (Math.abs(ch.pct) < 1e-9) delta = h('span', { class: 'delta flat', text: 'no change' });
+    else {
+      const up = ch.pct > 0;
+      delta = h('span', { class: 'delta ' + (up ? 'up' : 'down'),
+        title: `${brl.format(ch.from)} → ${brl.format(ch.to)}`,
+        text: `${up ? '▲' : '▼'} ${Math.abs(ch.pct * 100).toFixed(1)}%` });
+    }
+    const stock = p.avail === 1 ? h('span', { class: 'stock in', text: '✓ In stock' })
+      : p.avail === 0 ? h('span', { class: 'stock out', text: '✕ Out of stock' })
+      : h('span', { class: 'stock', text: '–', title: 'Stock not recorded: the tracker only reads it from the product page itself' });
+    const tr = h('tr', { 'data-id': p.id },
+      h('td', { class: 'sel' }, cb),
+      h('td', {}, h('span', { class: 'swatch' }), h('span', { class: 'pname', text: p.name }),
+        p.category ? h('div', { class: 'pcat', text: p.category.split('/').pop().replace(/-/g, ' ') }) : null),
+      h('td', { class: 'num', text: cash == null ? '–' : brl.format(cash) }),
+      h('td', { class: 'num hide-sm', text: list == null ? '–' : brl.format(list) }),
+      h('td', { class: 'num' }, delta),
+      h('td', { class: 'hide-sm' }, stock),
+      h('td', {}, link));
+    body.append(tr);
+  }
+  $('#count').textContent = `${items.length} of ${state.products.length} products`;
+  syncSelectionUI();
+}
+function lastVal(p, type) {
+  for (let i = p.rows.length - 1; i >= 0; i--) if (p.rows[i][type] != null) return p.rows[i][type];
+  return null;
+}
+
+/* ------------------------------------------------------------------ controls */
+function radioGroup(root, name, options, current, onChange) {
+  root.replaceChildren();
+  for (const [value, label] of options) {
+    const input = h('input', { type: 'radio', name, value });
+    input.checked = value === current;
+    input.addEventListener('change', () => onChange(value));
+    root.append(h('label', {}, input, h('span', { text: label })));
+  }
+}
+function applyRange() {
+  $('#custom').classList.toggle('on', state.range === 'custom');
+  refresh();
+}
+function refresh() { renderList(); drawChart(); }
+
+function setupControls() {
+  radioGroup($('#range'), 'range', RANGES.map(r => [r[0], r[1]]), state.range, v => {
+    state.range = v;
+    if (v === 'custom' && state.from == null) {
+      const [t0, t1] = windowBounds();
+      state.from = t1 - 30 * DAY; state.to = t1;
+      $('#from').value = dateInputValue(state.from); $('#to').value = dateInputValue(state.to);
+    }
+    applyRange();
+  });
+  const onDate = () => {
+    const f = $('#from').valueAsNumber, t = $('#to').valueAsNumber;
+    if (Number.isNaN(f)) return;
+    const d = new Date(f); const from = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()).getTime();
+    state.from = from;
+    if (!Number.isNaN(t)) { const e = new Date(t); state.to = new Date(e.getUTCFullYear(), e.getUTCMonth(), e.getUTCDate(), 23, 59, 59).getTime(); }
+    if (state.to != null && state.to < state.from) state.to = state.from + DAY - 1000;
+    refresh();
+  };
+  $('#from').addEventListener('change', onDate); $('#to').addEventListener('change', onDate);
+  radioGroup($('#ptype'), 'ptype', [['cash', 'Cash (PIX/boleto)'], ['list', 'List (card)']], state.ptype, v => { state.ptype = v; refresh(); });
+  radioGroup($('#scale'), 'scale', [['abs', 'R$'], ['pct', '% change']], state.scale, v => { state.scale = v; drawChart(); });
+  const sort = $('#sort');
+  for (const [v, l] of [['name', 'Name A–Z'], ['price-asc', 'Price: low to high'], ['price-desc', 'Price: high to low'],
+    ['drop', 'Biggest price drop'], ['rise', 'Biggest price rise'], ['changes', 'Most price changes']])
+    sort.append(h('option', { value: v, text: l }));
+  sort.addEventListener('change', () => { state.sort = sort.value; renderList(); });
+  $('#q').addEventListener('input', e => { state.q = e.target.value; renderList(); });
+  let rt; new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { if (!$('#app').classList.contains('hide')) drawChart(); }, 60); }).observe($('#chart'));
+}
+
+function defaultSelection() {
+  // products whose price has moved first, then the rest by id; up to 4
+  const moved = state.products.filter(p => new Set(p.rows.map(r => r.cash)).size > 1)
+    .sort((a, b) => b.rows.length - a.rows.length);
+  const rest = state.products.filter(p => !moved.includes(p)).sort((a, b) => a.id - b.id);
+  return [...moved, ...rest].slice(0, 4).map(p => p.id);
+}
+
+/* ------------------------------------------------------------------ boot */
+let controlsReady = false;
+async function show(bytes, sourceLabel) {
+  await openDatabase(bytes);
+  if (!state.products.length) throw new Error('The database has no price history yet.');
+  state.selected = []; state.slot.clear();
+  // with under 30 days of history the whole history is the useful default view
+  const first = Math.min(...state.products.map(p => p.rows[0].t));
+  state.range = Date.now() - first < 30 * DAY ? 'all' : '30d';
+  if (!controlsReady) { setupControls(); controlsReady = true; }
+  const r = $(`#range input[value="${state.range}"]`); if (r) r.checked = true;
+  $('#custom').classList.remove('on');
+  $('#loader').classList.add('hide'); $('#app').classList.remove('hide');
+  for (const id of defaultSelection()) toggleProduct(id, true);
+  $('#meta').textContent = `${state.products.length} products · last price change recorded ${fmtDateTime(state.dataEnd)} · ${sourceLabel}`;
+  refresh();
+}
+function needFile(title, msg) {
+  $('#app').classList.add('hide'); $('#loader').classList.remove('hide');
+  $('#loader-title').textContent = title; $('#loader-msg').textContent = msg;
+  $('#meta').textContent = 'No database loaded';
+}
+async function loadFile(file) {
+  try { await show(new Uint8Array(await file.arrayBuffer()), file.name); }
+  catch (e) { needFile('Could not read that file', String(e.message || e)); }
+}
+
+async function boot() {
+  if (typeof initSqlJs !== 'function') {
+    return needFile('Could not load the SQLite engine', 'This page loads sql.js from cdnjs.cloudflare.com. Check your internet connection and reload.');
+  }
+  try {
+    const res = await fetch(DB_URL, { cache: 'no-cache' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    await show(new Uint8Array(await res.arrayBuffer()), DB_URL);
+  } catch (e) {
+    const local = location.protocol === 'file:';
+    needFile('Choose the database file',
+      (local ? 'Browsers block web pages opened from disk (file://) from reading other local files, so pick the database yourself. '
+             : `Could not fetch ${DB_URL} (${e.message || e}). `) +
+      'It lives in the data folder of this project. Everything stays in your browser; nothing is uploaded.');
+  }
+}
+
+$('#pick').addEventListener('click', () => $('#file').click());
+$('#open-other').addEventListener('click', () => $('#file').click());
+$('#file').addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ''; });
+for (const ev of ['dragover', 'dragenter']) window.addEventListener(ev, e => { e.preventDefault(); $('#loader').classList.add('drag'); });
+for (const ev of ['dragleave', 'drop']) window.addEventListener(ev, () => $('#loader').classList.remove('drag'));
+window.addEventListener('drop', e => { e.preventDefault(); if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+
+// theme toggle: follows the OS until the viewer picks one
+(function theme() {
+  const root = document.documentElement;
+  try { const s = localStorage.getItem('theme'); if (s) root.dataset.theme = s; } catch (e) {}
+  $('#theme').addEventListener('click', () => {
+    const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark';
+    try { localStorage.setItem('theme', root.dataset.theme); } catch (e) {}
+  });
+})();
+
+boot();
+})();
+</script>
+<noscript>This page needs JavaScript to read the database.</noscript>
+</body>
+</html>

@@ -1,6 +1,6 @@
-# local scratch databases / logs; the tracked database is flexform_prices.db
-/*.db
-!/flexform_prices.db
+# scratch databases; the tracked one is data/flexform_prices.db
+*.db
+!/data/flexform_prices.db
 *.db-journal
 *.log
 __pycache__/
