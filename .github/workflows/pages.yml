@@ -1,0 +1,47 @@
+name: Deploy site
+
+# Publishes index.html + the database to GitHub Pages.
+# - runs when the page or the data changes in a push (e.g. you edit index.html)
+# - the tracker workflow triggers it by hand after it commits a price change,
+#   because pushes made with the built-in token don't start other workflows
+on:
+  push:
+    branches: [main]
+    paths:
+      - index.html
+      - data/**
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site/data
+          cp index.html _site/
+          cp data/flexform_prices.db _site/data/
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v5

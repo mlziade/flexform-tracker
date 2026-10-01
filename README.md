@@ -4,11 +4,16 @@ Tracks the price of every **office chair** (all colour variants) on
 https://www.flexform.com.br/ and keeps the history in a SQLite database,
 `data/flexform_prices.db`, committed to this repo.
 
+**Live chart: https://mlziade.github.io/flexform-tracker/**
+
 It runs by itself on GitHub Actions every 30 minutes
 ([`.github/workflows/track.yml`](.github/workflows/track.yml)). Nothing to run locally.
 Each run checks the site and, **only if a price or stock status changed**, commits the
 updated database. So the commit history of `data/flexform_prices.db` is a log of price changes.
 
+- When a run commits a price change it also starts the *Deploy site* workflow
+  ([`pages.yml`](.github/workflows/pages.yml)), which republishes the page with the new data
+  to GitHub Pages. It also runs when you push changes to `index.html`.
 - Run it now: Actions tab -> *Track prices* -> *Run workflow*.
 - GitHub's schedule is best-effort: runs are sometimes delayed by several minutes.
 - Public repos have scheduled workflows paused after 60 days without repo activity;
@@ -16,7 +21,8 @@ updated database. So the commit history of `data/flexform_prices.db` is a log of
 
 ## Viewing the history
 
-Open [`index.html`](index.html) in a browser: a price chart (step lines, since a price holds
+Open the [live site](https://mlziade.github.io/flexform-tracker/), or [`index.html`](index.html)
+locally: a price chart (step lines, since a price holds
 until it changes) with a timeframe selector (24h / 7d / 30d / 90d / 1y / All / custom dates),
 cash or list price, R$ or % change, and a searchable list of every product with its
 current price, change over the timeframe, stock and a link to the product page.
