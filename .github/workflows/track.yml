@@ -1,0 +1,40 @@
+name: Track prices
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # every 30 minutes (GitHub may delay runs under load)
+  workflow_dispatch:          # lets you run it by hand from the Actions tab
+
+# One run at a time, so two runs never push conflicting copies of the database.
+concurrency:
+  group: price-tracker
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check prices
+        run: python tracker.py --once --changes-only
+
+      - name: Commit database if it changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add flexform_prices.db
+          if git diff --cached --quiet; then
+            echo "No price changes."
+          else
+            git commit -m "Update prices $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi
