@@ -4,7 +4,7 @@
 Scrapes the product listing pages of https://www.flexform.com.br/ and stores a
 price observation for every product in a SQLite database.
 
-    python tracker.py              # run forever, one check every 30 minutes
+    python tracker.py              # run forever, one check every hour
     python tracker.py --once       # single check (use with Task Scheduler / cron)
     python tracker.py --interval 15
     python tracker.py --db other.db
@@ -44,7 +44,7 @@ REQUEST_TIMEOUT = 90     # uncached top-level categories can take 30s+
 RETRIES = 3
 
 DEFAULT_DB = Path(__file__).parent / "data" / "flexform_prices.db"
-DEFAULT_INTERVAL_MIN = 30
+DEFAULT_INTERVAL_MIN = 60
 
 log = logging.getLogger("flexform")
 

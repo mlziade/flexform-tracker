@@ -2,7 +2,7 @@ name: Track prices
 
 on:
   schedule:
-    - cron: "*/30 * * * *"   # every 30 minutes (GitHub may delay runs under load)
+    - cron: "17 * * * *"      # hourly, at :17 (:00 is the busiest minute and gets delayed most)
   workflow_dispatch:          # lets you run it by hand from the Actions tab
 
 # One run at a time, so two runs never push conflicting copies of the database.

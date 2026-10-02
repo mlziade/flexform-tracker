@@ -6,7 +6,7 @@ https://www.flexform.com.br/ and keeps the history in a SQLite database,
 
 **Live chart: https://mlziade.github.io/flexform-tracker/**
 
-It runs by itself on GitHub Actions every 30 minutes
+It runs by itself on GitHub Actions every hour
 ([`.github/workflows/track.yml`](.github/workflows/track.yml)). Nothing to run locally.
 Each run checks the site and, **only if a price or stock status changed**, commits the
 updated database. So the commit history of `data/flexform_prices.db` is a log of price changes.
@@ -90,7 +90,7 @@ Python 3.9+, standard library only.
 python tracker.py --once                 # one check, store every price
 python tracker.py --once --changes-only  # what the workflow runs
 python tracker.py --workers 8            # more parallel fetches (default 4, about 3 requests/s)
-python tracker.py                        # loop forever, every 30 min (--interval N)
+python tracker.py                        # loop forever, every 60 min (--interval N)
 ```
 
 Without `--changes-only` a row is stored for every product on every run.
